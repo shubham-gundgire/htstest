@@ -4,10 +4,12 @@ const bcrypt = require("bcryptjs");
 const Refesh = require("../model/refresh");
 const sanitizeHtml = require("sanitize-html");
 
+// user signup api controller function
 const signUp = async (req, res) => {
   try {
     const { first_name, last_name, email, password } = req.body;
 
+    //first check all parameters exists and not null
     if (!first_name || !last_name || !email || !password) {
       let message = "";
 
@@ -29,8 +31,11 @@ const signUp = async (req, res) => {
         code: "501",
       });
     }
+
+    // then check for provided email address is valid using regular expression
     const emailValidationRegEX =
       /^(([^<>()[\]\\.,;:\s@"]+(\.[^<>()[\]\\.,;:\s@"]+)*)|.(".+"))@((\[[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}\])|(([a-zA-Z\-0-9]+\.)+[a-zA-Z]{2,}))$/;
+
     const isValidEmail = emailValidationRegEX.test(email.toLowerCase());
 
     if (!isValidEmail) {
@@ -39,7 +44,7 @@ const signUp = async (req, res) => {
         Code: "502",
       });
     }
-
+    // then check email id already exists in database. email should be unique for all users. if email already exists we reurn below response.
     const user = await User.findOne({ email: email.toLowerCase() });
 
     if (user) {
@@ -49,8 +54,10 @@ const signUp = async (req, res) => {
       });
     }
 
+    // hash user password. we can not store user password in plain text.
     const hashPassword = await bcrypt.hash(password, 10);
 
+    // then create user account with provided information
     const newUser = await User.create({
       first_name: sanitizeHtml(first_name),
       last_name: sanitizeHtml(last_name),
@@ -67,6 +74,7 @@ const signUp = async (req, res) => {
         });
       });
 
+    // genrate refresh and access token. this is not included in provided document but i added it for best practices.
     const refreshToken = await jwt.sign(
       { id: newUser._id, email: newUser.email },
       process.env.REFRESH_TOKEN_SECRET,
@@ -79,15 +87,17 @@ const signUp = async (req, res) => {
       { expiresIn: "5m" }
     );
 
+    //store refresh token in database
     const refesharray = await Refesh.create({ refreshtoken: refreshToken });
 
+    // set cookie which contains refresh and access token
     res.cookie("refreshToken", refreshToken, {
       maxAge: 5000,
     });
     res.cookie("accessToken", accessToken, {
       maxAge: 5000,
     });
-
+    // return response after all validation
     res.status(200).json({ msg: "User sign-Up Successfully.", code: 201 });
   } catch (error) {
     res.status(403).json({
@@ -97,10 +107,13 @@ const signUp = async (req, res) => {
   }
 };
 
+
+// user login function
 const signIn = async (req, res) => {
   try {
     const { email, password } = req.body;
 
+    //check email and password feild should be provideda and not null
     if (!email || !password) {
       let message = "";
 
@@ -117,8 +130,10 @@ const signIn = async (req, res) => {
       });
     }
 
+    // check email exists or not in database
     const user = await User.findOne({ email: email.toLowerCase() });
 
+    // if email does not exists in database return below response
     if (!user) {
       return res.status(403).json({
         msg: "Invalid Email or Password!",
@@ -126,6 +141,7 @@ const signIn = async (req, res) => {
       });
     }
 
+    //check provided password matches with user's password
     const isValidPass = await bcrypt.compare(password, user.password);
 
     if (!isValidPass) {
@@ -135,6 +151,7 @@ const signIn = async (req, res) => {
       });
     }
 
+    // genrate refresh and access token.
     const refreshToken = await jwt.sign(
       { id: user._id, email: user.email },
       process.env.REFRESH_TOKEN_SECRET,
@@ -147,28 +164,27 @@ const signIn = async (req, res) => {
       { expiresIn: "5m" }
     );
 
+    //store refresh token in database
     const refesharray = await Refesh.create({ refreshtoken: refreshToken });
 
+    // set cookie which contains refresh and access token
     res.cookie("refreshToken", refreshToken, {
       maxAge: 5000,
     });
     res.cookie("accessToken", accessToken, {
-       maxAge: 5000,
+      maxAge: 5000,
     });
 
-    res
-      .status(200)
-      .json({
-        msg: "User Login Successfully.",
-        code: 201,
-        userInfo: {
-          first_name: user.first_name,
-          last_name: user.last_name,
-          email: user.email,
-        },
-      });
+    res.status(200).json({
+      msg: "User Login Successfully.",
+      code: 201,
+      userInfo: {
+        first_name: user.first_name,
+        last_name: user.last_name,
+        email: user.email,
+      },
+    });
   } catch (error) {
-    console.log(error);
     res.status(403).json({
       msg: "Something went wrong. Please try again.",
       Code: "100",
